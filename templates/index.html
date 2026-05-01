@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IOC Enrichment Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: monospace; background: #0d1117; color: #c9d1d9; max-width: 900px; margin: 60px auto; padding: 0 20px; }
+        h1 { color: #58a6ff; }
+        input { width: 100%; padding: 10px; background: #161b22; border: 1px solid #30363d; color: #c9d1d9; font-family: monospace; font-size: 16px; margin: 10px 0; box-sizing: border-box; }
+        button { padding: 10px 20px; background: #238636; color: white; border: none; cursor: pointer; font-family: monospace; font-size: 16px; }
+        button:hover { background: #2ea043; }
+        #results { margin-top: 30px; display: none; }
+        .card { background: #161b22; border: 1px solid #30363d; padding: 20px; margin-bottom: 16px; border-radius: 4px; }
+        .card h2 { color: #58a6ff; margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .stat { background: #0d1117; padding: 10px; border-radius: 4px; }
+        .stat-label { font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: bold; color: #c9d1d9; }
+        .stat-value.red { color: #f85149; }
+        .stat-value.yellow { color: #d29922; }
+        .stat-value.green { color: #3fb950; }
+        .ai-verdict { line-height: 1.7; }
+        .ai-verdict h1, .ai-verdict h2, .ai-verdict h3 { color: #58a6ff; }
+        .ai-verdict strong { color: #f0f6fc; }
+        .ai-verdict table { border-collapse: collapse; width: 100%; }
+        .ai-verdict td, .ai-verdict th { border: 1px solid #30363d; padding: 6px 10px; }
+        .loading { color: #8b949e; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 IOC Enrichment Tool</h1>
+    <p>Enter an IP address or domain to analyse</p>
+    <input type="text" id="ioc-input" placeholder="e.g. 185.220.101.45" />
+    <button onclick="analyse()">Analyse</button>
+    <div id="results"></div>
+
+    <script>
+        async function analyse() {
+            const ioc = document.getElementById("ioc-input").value.trim();
+            if (!ioc) return;
+
+            const results = document.getElementById("results");
+            results.style.display = "block";
+            results.innerHTML = '<div class="loading">Analysing ' + ioc + '...</div>';
+
+            const response = await fetch("/analyse", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ioc })
+            });
+
+            const data = await response.json();
+            const vt = data.virustotal;
+            const abuse = data.abuseipdb;
+
+            results.innerHTML = `
+                <div class="card">
+                    <h2>VirusTotal</h2>
+                    <div class="stat-grid">
+                        <div class="stat"><div class="stat-label">Malicious</div><div class="stat-value red">${vt.malicious ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">Suspicious</div><div class="stat-value yellow">${vt.suspicious ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">Harmless</div><div class="stat-value green">${vt.harmless ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">Undetected</div><div class="stat-value">${vt.undetected ?? 'N/A'}</div></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>AbuseIPDB</h2>
+                    <div class="stat-grid">
+                        <div class="stat"><div class="stat-label">Abuse Confidence</div><div class="stat-value red">${abuse.abuse_confidence_score ?? 'N/A'}%</div></div>
+                        <div class="stat"><div class="stat-label">Country</div><div class="stat-value">${abuse.country ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">Total Reports</div><div class="stat-value">${abuse.total_reports ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">ISP</div><div class="stat-value" style="font-size:13px">${abuse.isp ?? 'N/A'}</div></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>AI Triage Verdict</h2>
+                    <div class="ai-verdict">${marked.parse(data.ai_verdict)}</div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
