@@ -4,6 +4,9 @@ A web-based threat intelligence tool that automatically enriches Indicators of C
 
 Built as a practical SOC analyst tool to automate the manual process of cross-referencing multiple threat intelligence platforms.
 
+## Live Demo
+https://your-railway-url.up.railway.app
+
 ## Demo
 
 ![IOC Enrichment Tool](demo.png)
