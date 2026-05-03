@@ -3,18 +3,26 @@ from dotenv import load_dotenv
 import os
 import requests
 import anthropic
+import re
 
 load_dotenv()
 
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
+SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 app = Flask(__name__)
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
+def is_ip(ioc):
+    return bool(re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ioc))
+
 def get_virustotal(ioc):
-    url = f"https://www.virustotal.com/api/v3/ip_addresses/{ioc}"
+    if is_ip(ioc):
+        url = f"https://www.virustotal.com/api/v3/ip_addresses/{ioc}"
+    else:
+        url = f"https://www.virustotal.com/api/v3/domains/{ioc}"
     headers = {"x-apikey": VIRUSTOTAL_API_KEY}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -29,6 +37,8 @@ def get_virustotal(ioc):
     return {"error": f"VirusTotal returned {response.status_code}"}
 
 def get_abuseipdb(ioc):
+    if not is_ip(ioc):
+        return {"note": "AbuseIPDB only supports IP addresses"}
     url = "https://api.abuseipdb.com/api/v2/check"
     headers = {"Key": ABUSEIPDB_API_KEY, "Accept": "application/json"}
     params = {"ipAddress": ioc, "maxAgeInDays": 90}
@@ -44,23 +54,44 @@ def get_abuseipdb(ioc):
         }
     return {"error": f"AbuseIPDB returned {response.status_code}"}
 
-def get_ai_verdict(ioc, vt, abuse):
+def get_shodan(ioc):
+    if not is_ip(ioc):
+        return {"note": "Shodan IP lookup only supports IP addresses"}
+    url = f"https://api.shodan.io/shodan/host/{ioc}?key={SHODAN_API_KEY}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        return {
+            "org": data.get("org"),
+            "country": data.get("country_name"),
+            "os": data.get("os"),
+            "open_ports": data.get("ports", []),
+            "tags": data.get("tags", []),
+            "vulnerabilities": list(data.get("vulns", {}).keys())[:5]
+        }
+    return {"error": f"Shodan returned {response.status_code}"}
+
+def get_ai_verdict(ioc, vt, abuse, shodan):
     prompt = f"""You are a SOC analyst. Analyse this IOC and give a concise triage report.
 
 IOC: {ioc}
 
-VirusTotal Results:
+VirusTotal:
 - Malicious flags: {vt.get('malicious')}
 - Suspicious flags: {vt.get('suspicious')}
 - Harmless flags: {vt.get('harmless')}
-- Undetected: {vt.get('undetected')}
 
-AbuseIPDB Results:
+AbuseIPDB:
 - Abuse confidence score: {abuse.get('abuse_confidence_score')}%
 - Country: {abuse.get('country')}
 - ISP: {abuse.get('isp')}
 - Total reports: {abuse.get('total_reports')}
-- Last reported: {abuse.get('last_reported')}
+
+Shodan:
+- Org: {shodan.get('org')}
+- Open ports: {shodan.get('open_ports')}
+- Tags: {shodan.get('tags')}
+- Known vulnerabilities: {shodan.get('vulnerabilities')}
 
 Provide:
 1. VERDICT: (Malicious / Suspicious / Likely Benign)
@@ -85,11 +116,13 @@ def analyse():
     print(f"Analysing: {ioc}")
     vt_result = get_virustotal(ioc)
     abuse_result = get_abuseipdb(ioc)
-    verdict = get_ai_verdict(ioc, vt_result, abuse_result)
+    shodan_result = get_shodan(ioc)
+    verdict = get_ai_verdict(ioc, vt_result, abuse_result, shodan_result)
     return jsonify({
         "ioc": ioc,
         "virustotal": vt_result,
         "abuseipdb": abuse_result,
+        "shodan": shodan_result,
         "ai_verdict": verdict
     })
 

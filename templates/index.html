@@ -20,18 +20,22 @@
         .stat-value.red { color: #f85149; }
         .stat-value.yellow { color: #d29922; }
         .stat-value.green { color: #3fb950; }
+        .tag { display: inline-block; background: #0d1117; border: 1px solid #30363d; padding: 2px 8px; border-radius: 3px; margin: 2px; font-size: 12px; }
+        .tag.red { border-color: #f85149; color: #f85149; }
+        .tag.blue { border-color: #58a6ff; color: #58a6ff; }
         .ai-verdict { line-height: 1.7; }
         .ai-verdict h1, .ai-verdict h2, .ai-verdict h3 { color: #58a6ff; }
         .ai-verdict strong { color: #f0f6fc; }
         .ai-verdict table { border-collapse: collapse; width: 100%; }
         .ai-verdict td, .ai-verdict th { border: 1px solid #30363d; padding: 6px 10px; }
         .loading { color: #8b949e; padding: 20px; }
+        .note { color: #8b949e; font-size: 12px; }
     </style>
 </head>
 <body>
     <h1>🔍 IOC Enrichment Tool</h1>
     <p>Enter an IP address or domain to analyse</p>
-    <input type="text" id="ioc-input" placeholder="e.g. 185.220.101.45" />
+    <input type="text" id="ioc-input" placeholder="e.g. 185.220.101.45 or malicious.com" />
     <button onclick="analyse()">Analyse</button>
     <div id="results"></div>
 
@@ -42,7 +46,7 @@
 
             const results = document.getElementById("results");
             results.style.display = "block";
-            results.innerHTML = '<div class="loading">Analysing ' + ioc + '...</div>';
+            results.innerHTML = '<div class="loading">Analysing ' + ioc + '... this may take a few seconds</div>';
 
             const response = await fetch("/analyse", {
                 method: "POST",
@@ -53,6 +57,38 @@
             const data = await response.json();
             const vt = data.virustotal;
             const abuse = data.abuseipdb;
+            const shodan = data.shodan;
+
+            const shodanCard = shodan.note ? 
+                `<div class="card"><h2>Shodan</h2><p class="note">${shodan.note}</p></div>` :
+                shodan.error ?
+                `<div class="card"><h2>Shodan</h2><p class="note">${shodan.error}</p></div>` :
+                `<div class="card">
+                    <h2>Shodan</h2>
+                    <div class="stat-grid">
+                        <div class="stat"><div class="stat-label">Organisation</div><div class="stat-value" style="font-size:13px">${shodan.org ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">Country</div><div class="stat-value">${shodan.country ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">OS</div><div class="stat-value" style="font-size:13px">${shodan.os ?? 'Unknown'}</div></div>
+                    </div>
+                    <div style="margin-top:12px">
+                        <div class="stat-label">Open Ports</div>
+                        <div style="margin-top:4px">${(shodan.open_ports || []).map(p => `<span class="tag blue">${p}</span>`).join('') || 'None'}</div>
+                    </div>
+                    ${shodan.tags?.length ? `<div style="margin-top:12px"><div class="stat-label">Tags</div><div style="margin-top:4px">${shodan.tags.map(t => `<span class="tag">${t}</span>`).join('')}</div></div>` : ''}
+                    ${shodan.vulnerabilities?.length ? `<div style="margin-top:12px"><div class="stat-label">Known CVEs</div><div style="margin-top:4px">${shodan.vulnerabilities.map(v => `<span class="tag red">${v}</span>`).join('')}</div></div>` : ''}
+                </div>`;
+
+            const abuseCard = abuse.note ?
+                `<div class="card"><h2>AbuseIPDB</h2><p class="note">${abuse.note}</p></div>` :
+                `<div class="card">
+                    <h2>AbuseIPDB</h2>
+                    <div class="stat-grid">
+                        <div class="stat"><div class="stat-label">Abuse Confidence</div><div class="stat-value red">${abuse.abuse_confidence_score ?? 'N/A'}%</div></div>
+                        <div class="stat"><div class="stat-label">Country</div><div class="stat-value">${abuse.country ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">Total Reports</div><div class="stat-value">${abuse.total_reports ?? 'N/A'}</div></div>
+                        <div class="stat"><div class="stat-label">ISP</div><div class="stat-value" style="font-size:13px">${abuse.isp ?? 'N/A'}</div></div>
+                    </div>
+                </div>`;
 
             results.innerHTML = `
                 <div class="card">
@@ -64,15 +100,8 @@
                         <div class="stat"><div class="stat-label">Undetected</div><div class="stat-value">${vt.undetected ?? 'N/A'}</div></div>
                     </div>
                 </div>
-                <div class="card">
-                    <h2>AbuseIPDB</h2>
-                    <div class="stat-grid">
-                        <div class="stat"><div class="stat-label">Abuse Confidence</div><div class="stat-value red">${abuse.abuse_confidence_score ?? 'N/A'}%</div></div>
-                        <div class="stat"><div class="stat-label">Country</div><div class="stat-value">${abuse.country ?? 'N/A'}</div></div>
-                        <div class="stat"><div class="stat-label">Total Reports</div><div class="stat-value">${abuse.total_reports ?? 'N/A'}</div></div>
-                        <div class="stat"><div class="stat-label">ISP</div><div class="stat-value" style="font-size:13px">${abuse.isp ?? 'N/A'}</div></div>
-                    </div>
-                </div>
+                ${abuseCard}
+                ${shodanCard}
                 <div class="card">
                     <h2>AI Triage Verdict</h2>
                     <div class="ai-verdict">${marked.parse(data.ai_verdict)}</div>
