@@ -35,12 +35,13 @@ cd ioc-enrichment-tool
 pip3 install flask anthropic requests python-dotenv
 ```
 
-3. Create a `.env` file with your API keys
-VIRUSTOTAL_API_KEY=your_key_here
+3. Create a `.env` file with your API key
+```VIRUSTOTAL_API_KEY=your_key_here
 ABUSEIPDB_API_KEY=your_key_here
 ANTHROPIC_API_KEY=your_key_here
+```
 
-4. Run the app
+5. Run the app
 ```bash
 python3 app.py
 ```
